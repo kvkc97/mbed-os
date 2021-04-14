@@ -16,7 +16,7 @@
 
 language: sh
 os: linux
-dist: xenial
+dist: bionic
 
 
 env:
@@ -31,12 +31,17 @@ cache:
     - ${HOME}/.cache/deps
 
 before_install:
-  - source tools/test/travis-ci/functions.sh
+  - source tools/test/travis-ci/functions.sh  
 
 addons:
   apt:
+    sources:
+      - sourceline: 'deb https://apt.kitware.com/ubuntu/ bionic main'
+        key_url: 'https://apt.kitware.com/keys/kitware-archive-latest.asc'
+      - sourceline: 'deb https://apt.kitware.com/ubuntu/ bionic-rc main'
     packages:
-    - ninja-build
+      - cmake
+      - ninja-build
 
 matrix:
   include:
@@ -48,7 +53,6 @@ matrix:
       env: NAME=gitattributestest
       script:
         - git diff --exit-code
-
     - <<: *basic-vm
       name: "license check"
       env: NAME=licence_check
@@ -109,12 +113,12 @@ matrix:
               ':!*tests/*' ':!*targets/*' ':!*TARGET_*' ':!*unsupported/*' \
               ':!*events/tests/*' ':!*drivers/tests/*'
 
-    ### Docs Tests ###
+    #### Docs Tests ###
     - &docs-vm
       stage: "Docs"
       name: "astyle"
       env: NAME=astyle
-      install:
+      install:        
         - >-
           curl -L0 https://mbed-os-ci-public.s3-eu-west-1.amazonaws.com/jenkins-ci/deps/astyle_3.1_linux.tar.gz --output astyle.tar.gz;
           mkdir -p BUILD && tar xf astyle.tar.gz -C BUILD;
@@ -137,7 +141,7 @@ matrix:
     - <<: *docs-vm
       name: "spellcheck"
       env: NAME=doxy-spellcheck
-      install:
+      install:        
         - source_pkg aspell
       script:
         # TODO: run checks on all directories once all mispellings are fixed
@@ -150,7 +154,7 @@ matrix:
     - <<: *docs-vm
       name: "doxygen"
       env: NAME=docs
-      install:
+      install:        
         # Build doxygen
         - >
           (git clone --depth=1 --single-branch --branch Release_1_8_14 https://github.com/doxygen/doxygen;
@@ -216,10 +220,10 @@ matrix:
     ### Python Tests ###
     - &pytools-vm
       stage: "Pytest"
-      name: "tools-py27"
-      env: NAME=tools-py2.7
+      name: "tools-py35"
+      env: NAME=tools-py3.5
       language: python
-      python: 2.7
+      python: 3.5
       install:
         # Install gcc
         - source_pkg gcc
@@ -244,12 +248,7 @@ matrix:
         - PYTHONPATH=. coverage run -a -m pytest tools/test
         - python tools/test/pylint.py
         - coverage run -a tools/project.py -S | sed -n '/^Total/p'
-        - coverage html
-
-    - <<: *pytools-vm
-      name: "tools-py35"
-      env: NAME=tools-py3.5
-      python: 3.5
+        - coverage html     
 
     - <<: *pytools-vm
       name: "tools-py36"
@@ -261,7 +260,6 @@ matrix:
       env: NAME=tools-py3.7
       python: 3.7
 
-
     ### Extended Tests ###
     - &extended-vm
       stage: "Extended"
@@ -269,7 +267,7 @@ matrix:
       env: NAME=littlefs LITTLEFS=storage/filesystem/littlefs
       language: python
       python: 3.7
-      install:
+      install:        
         # Install gcc
         - source_pkg gcc
         - arm-none-eabi-gcc --version
@@ -279,8 +277,7 @@ matrix:
         - pip install -r requirements.txt
         - pip list --verbose
         # Install test-specific packages
-        - source_pkg fuse
-        - source_pkg libfuse-dev
+        - sudo apt-get -y install libfuse-dev        
         - fusermount --version
       before_script:
         # Setup and patch littlefs-fuse
@@ -290,10 +287,10 @@ matrix:
         - rm -rf littlefs_fuse/littlefs/*
         - cp -r $(git ls-tree --name-only HEAD ${LITTLEFS}/littlefs/) littlefs_fuse/littlefs
         # Create file-backed disk
-        - mkdir MOUNT
-        - sudo chmod a+rw /dev/loop0
+        - mkdir MOUNT        
         - dd if=/dev/zero bs=512 count=2048 of=DISK
-        - losetup /dev/loop0 DISK
+        - sudo losetup /dev/loop9 DISK
+        - sudo chmod a+rw /dev/loop9
         - CFLAGS="-Werror -Wno-format"
       script:
         # Run local littlefs tests
@@ -306,8 +303,8 @@ matrix:
         - make -C${LITTLEFS}/littlefs clean test QUIET=1 CFLAGS+="-DLFS_NO_INTRINSICS"
         # Self-hosting littlefs fuzz test with littlefs-fuse
         - make -Clittlefs_fuse
-        - littlefs_fuse/lfs --format /dev/loop0
-        - littlefs_fuse/lfs /dev/loop0 MOUNT
+        - littlefs_fuse/lfs --format /dev/loop9
+        - littlefs_fuse/lfs /dev/loop9 MOUNT
         - ls MOUNT
         - mkdir MOUNT/littlefs
         - cp -r $(git ls-tree --name-only HEAD ${LITTLEFS}/littlefs/) MOUNT/littlefs
@@ -343,3 +340,23 @@ matrix:
             | while read file; do python ./hal/tests/pinvalidate/pinvalidate.py -vfp "${file}"; done
         - git diff --exit-code --diff-filter=d --color
 
+    ### Mbed OS unittest ###
+    - &cmake-build-run-unittest
+      stage: "CMake"
+      name: "CMake unittest build"
+      env: NAME=cmake_unittest      
+      install:
+        - sudo apt-get install -y gcovr
+        # Hide Travis-preinstalled CMake
+        # The Travis-preinstalled CMake is unfortunately not installed via apt, so we
+        # can't replace it with an apt-supplied version very easily. Additionally, we
+        # can't permit the Travis-preinstalled copy to survive, as the Travis default
+        # path lists the Travis CMake install location ahead of any place where apt
+        # would install CMake to. Instead of apt removing or upgrading to a new CMake
+        # version, we must instead delete the Travis copy of CMake.
+        - sudo rm -rf /usr/local/cmake*
+      script:        
+        - echo ctest --build-and-test . build --build-generator Ninja --build-options -DBUILD_TESTING=ON --test-command ctest
+        - ctest --build-and-test . build --build-generator Ninja --build-options -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Debug -DCOVERAGE=True --test-command ctest
+        - gcovr -r .
+        - ccache -s
