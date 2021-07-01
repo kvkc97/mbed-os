@@ -1,0 +1,47 @@
+{
+    "name": "lr1110-lora-driver",
+    "config": {
+        "spi-frequency": {
+        	"help": "SPI frequency, Default: 8 MHz",
+        	"value": 8000000
+        },
+        "buffer-size": {
+        	"help": "Max. buffer size the radio can handle, Default: 255 B",
+        	"value": 255
+        },
+		"radio-variant": {
+            "help": "Use to set the radio variant if the antenna switch input is not connected.",
+            "value": "LR1110UNDEFINED"
+        },
+        "spi-mosi": {
+            "value": "NC"
+        },
+        "spi-miso": {
+            "value": "NC"
+        },
+        "spi-sclk": {
+            "value": "NC"
+        },
+		"spi-cs": {
+            "value": "NC"
+        },
+        "nreset": {
+            "value": "NC"
+        },
+        "dio7": {
+            "value": "NC"
+        },
+        "dio8": {
+            "value": "NC"
+        },
+        "dio9": {
+            "value": "NC"
+        },
+		"busy": {
+            "value": "NC"
+        },
+        "lnactrlon": {
+            "value": "NC"
+        }
+    }
+}
